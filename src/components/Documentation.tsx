@@ -3,8 +3,8 @@ import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 
 const DOCS: Record<string, string> = {
-  documentation: "../../documentation/Kinva_Documentation.md",
-  chatbot: "../../documentation/Kinva_Chatbot_Instructions_System.md",
+  documentation: "../../public/docs/Kinva_Documentation.md",
+  chatbot: "../../public/docs/Kinva_Chatbot_Instructions_System.md",
 };
 
 const Documentation = () => {
