@@ -14,6 +14,8 @@ import { Chatbot } from './components/Chatbot';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AnimatePresence } from 'framer-motion';
 import { LanguageProvider, useLanguage } from './LanguageContext';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Documentation from "./components/Documentation";
 
 // Create a wrapper component to consume the context
 const MainContent: React.FC = () => {
@@ -146,7 +148,17 @@ const MainContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <LanguageProvider>
-      <MainContent />
+      <BrowserRouter>
+        <Routes>
+
+          {/* PAGE PRINCIPALE */}
+          <Route path="/" element={<MainContent />} />
+
+          {/* DOCUMENTATION */}
+          <Route path="/documentation" element={<Documentation />} />
+
+        </Routes>
+      </BrowserRouter>
     </LanguageProvider>
   );
 };
