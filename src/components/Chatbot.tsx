@@ -1,464 +1,398 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Sparkles, Link, ExternalLink, ArrowRight, User, Mail, Phone, FileText, Clock, RefreshCw } from 'lucide-react';
+import { MessageCircle, X, Send, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GoogleGenAI } from "@google/genai";
-import { useLanguage } from '../LanguageContext';
-import { Button } from './Button';
-import { LeadData, ChatLog } from '../types';
-import { supabase } from '../supabaseClient';
+
+// NOTE : J'ai mis des types/interfaces de base pour Button et useLanguage/ReactMarkdown.
+// Assurez-vous d'utiliser vos implémentations réelles.
+
+// Simuler les dépendances manquantes pour que le code soit auto-suffisant
+const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, className, ...props }) => (
+  <button className={`flex items-center justify-center rounded-xl font-semibold text-sm transition-all h-10 ${className}`} {...props}>
+    {children}
+  </button>
+);
+const useLanguage = () => ({ 
+    content: { 
+        chatbot: { 
+            title: "RABE IA", 
+            welcome: "Bonjour ! Je suis Rabe IA, le chatbot officiel de Kinva. Comment puis-je vous aider ?", 
+            placeholder: "Écrivez votre message...",
+            error: "Une erreur est survenue lors du traitement de votre demande."
+        } 
+    } 
+});
+const ReactMarkdown: React.FC<{ children: string; components?: any }> = ({ children }) => <>{children}</>;
+
 
 interface Message {
   id: string;
   role: 'user' | 'model';
   text: string;
-  sources?: { title: string; uri: string }[];
 }
 
-// DATA COLLECTION FUNCTION (Now saves to Supabase)
-const collectCustomerData = async (type: 'lead' | 'chat', data: any) => {
-  if (type === 'lead') {
-    await supabase.from('leads').insert([{
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        description: data.description,
-        source: 'chatbot',
-        status: 'new'
-    }]);
-  } 
-  else if (type === 'chat') {
-    await supabase.from('chats').insert([{
-        user_name: data.user,
-        query: data.query,
-        response: data.response
-    }]);
-  }
-};
+/* ==============================
+   CONFIG
+================================ */
+const N8N_WEBHOOK_URL =
+  'https://devworkshop.app.n8n.cloud/webhook-test/chat';
 
-const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const STORAGE_KEY = 'kinva_chat_messages';
+const SESSION_ID_KEY = 'kinva_chat_session';
+// Clé pour persister l'état "terminé"
+const SESSION_STATUS_KEY = 'kinva_chat_status'; 
 
+const QUICK_MESSAGES = [
+  'Je veux créer un site web',
+  'Quels sont vos tarifs ?',
+  'J’ai besoin d’un chatbot IA',
+  'Je veux un devis'
+];
+
+/* ==============================
+   COMPONENT
+================================ */
 export const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  
-  // Lead Capture State
-  const [hasJoined, setHasJoined] = useState(false);
-  const [userName, setUserName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
-  const [userPhone, setUserPhone] = useState('');
-  const [userDesc, setUserDesc] = useState('');
-
-  // Chat State
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  const [isResetting, setIsResetting] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  
+  // État pour gérer le verrouillage du chat après une conversion
   const [isSessionExpired, setIsSessionExpired] = useState(false);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  const { content, language } = useLanguage();
+  const { content } = useLanguage();
   const { chatbot } = content;
 
-  // Listen for custom event to open chatbot
-  useEffect(() => {
-    const handleOpenChatbot = () => {
-      setIsOpen(true);
-    };
-    window.addEventListener('open-chatbot', handleOpenChatbot);
-    return () => window.removeEventListener('open-chatbot', handleOpenChatbot);
-  }, []);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isOpen, hasJoined]);
-
-  // Session Timeout Logic
-  const resetInactivityTimer = () => {
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    if (hasJoined && !isSessionExpired) {
-      inactivityTimer.current = setTimeout(() => {
-        setIsSessionExpired(true);
-      }, SESSION_TIMEOUT_MS);
+  /* ==============================
+      SESSION ID & INIT
+  ================================ */
+  const getSessionId = () => {
+    let id = localStorage.getItem(SESSION_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(SESSION_ID_KEY, id);
     }
+    return id;
   };
 
   useEffect(() => {
-    if (isOpen && hasJoined && !isSessionExpired) {
-      resetInactivityTimer();
+    // 1. Charger les messages
+    const savedMessages = localStorage.getItem(STORAGE_KEY);
+    if (savedMessages) {
+      setMessages(JSON.parse(savedMessages));
+    } else if (chatbot?.welcome) {
+      setMessages([{ id: 'rabe-welcome', role: 'model', text: chatbot.welcome }]);
     }
-    return () => {
-      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    };
-  }, [isOpen, hasJoined, isSessionExpired]);
 
+    // 2. Charger l'état de la session (si elle était déjà finie)
+    const savedStatus = localStorage.getItem(SESSION_STATUS_KEY);
+    if (savedStatus === 'finished') {
+      setIsSessionExpired(true);
+    }
+  }, [chatbot?.welcome]);
 
-  // Initialize chat with welcome message once joined
   useEffect(() => {
-    if (hasJoined && messages.length === 0) {
-      setMessages([{
-        id: 'welcome',
-        role: 'model',
-        text: chatbot.welcome
-      }]);
+    // Sauvegarder les messages
+    if (messages.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     }
-  }, [hasJoined, chatbot.welcome, messages.length]);
+  }, [messages]);
 
-  const handleJoin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userName.trim() || !userEmail.trim() || !userPhone.trim()) return;
+  useEffect(() => {
+    // Scroll au dernier message
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isOpen, isResetting, isSessionExpired]); 
 
-    setHasJoined(true);
-    resetInactivityTimer();
-    collectCustomerData('lead', { name: userName, email: userEmail, phone: userPhone, description: userDesc });
-  };
-
-  const handleRestart = () => {
-    setMessages([{
-      id: 'welcome',
-      role: 'model',
-      text: chatbot.welcome
-    }]);
-    setIsSessionExpired(false);
-    resetInactivityTimer();
-  };
-
-  const handleSend = async (overrideInput?: string) => {
-    if (isSessionExpired) return;
+  /* ==============================
+      NEW CHAT LOGIC
+  ================================ */
+  const handleNewChat = () => {
+    setIsResetting(true);
     
-    const textToSend = overrideInput || input;
-    if (!textToSend.trim()) return;
+    // Délai pour l'animation de reset
+    setTimeout(() => {
+      // Tout nettoyer
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(SESSION_ID_KEY);
+      localStorage.removeItem(SESSION_STATUS_KEY);
+      
+      setMessages([
+        { id: 'rabe-welcome', role: 'model', text: chatbot.welcome }
+      ]);
+      
+      setIsSessionExpired(false); // Débloque l'input
+      setIsResetting(false);
+    }, 800);
+  };
 
-    resetInactivityTimer(); // Reset timer on user action
+  /* ==============================
+      SEND MESSAGE
+  ================================ */
+  const handleSend = async (overrideInput?: string) => {
+    if (isLoading || isResetting || isSessionExpired) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      text: textToSend
-    };
+    const text = typeof overrideInput === 'string' ? overrideInput : input;
+    if (!text || !text.trim()) return;
 
-    setMessages(prev => [...prev, userMessage]);
-    if (!overrideInput) setInput('');
+    const sessionId = getSessionId();
+
+    setMessages(prev => [
+      ...prev,
+      { id: Date.now().toString(), role: 'user', text }
+    ]);
+
+    setInput('');
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
-      // Build conversation history for context
-      const history = messages.slice(-10).map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }]
-      }));
-      
-      // Add user context from form if available
-      let systemContext = `You are Rabe IA, Kinva's intelligent assistant.
-          User: "${userName}" (Phone: "${userPhone}").
-          
-          CORE DIRECTIVE: You are a strict Business & IT Consultant.
-          
-          STRICT CONCISENESS RULES:
-          1. KEEP RESPONSES SHORT. Max 2-3 sentences per paragraph.
-          2. Max total length: 50 words.
-          3. Use bullet points for lists.
-          4. No fluffy introductions. Get straight to the point.
-          5. If the user asks for a price, give the price immediately.
-
-          STRICT TOPIC RESTRICTIONS:
-          - ALLOWED: IT, Web, AI, Business, Kinva Services.
-          - FORBIDDEN: Cooking, Sports, General Trivia, Personal Advice.
-          - IF FORBIDDEN: Pivot immediately to business. "Je ne cuisine pas, mais je peux automatiser votre restaurant."
-
-          Services:
-          1. Kinva Systems (Network, Security, Starlink)
-          2. Kinva Web (Sites, Apps, 59k/139k/249k Ar)
-          3. Kinva AI (Chatbots 24/7, Automation)
-          4. Kinva Academy (Training)
-          
-          Language: Answer in ${language === 'fr' ? 'French' : 'English'}.
-          Use Google Search for real-time Mada tech news only.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-            ...history,
-            { role: 'user', parts: [{ text: userMessage.text }] }
-        ],
-        config: {
-          tools: [{ googleSearch: {} }],
-          systemInstruction: systemContext,
-        },
+      const res = await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          chatInput: text
+        })
       });
 
-      const responseText = response.text || "";
-      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      const data = await res.json();
+
+      if (!res.ok) throw new Error('Workflow error');
+
+      // Normalisation de la réponse (peut être un array [0] ou un objet direct)
+      const responseData = Array.isArray(data) ? data[0] : data;
       
-      const sources = groundingChunks
-        ?.map((chunk: any) => chunk.web)
-        .filter((web: any) => web && web.uri && web.title)
-        .map((web: any) => ({ title: web.title, uri: web.uri }));
+      // --- LOGIQUE DE FIN DE CONVERSATION ---
+      if (responseData?.conversation_finished === true) {
+        setIsSessionExpired(true);
+        localStorage.setItem(SESSION_STATUS_KEY, 'finished');
+      }
+      // ---------------------------------------
 
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'model',
-        text: responseText,
-        sources: sources
-      };
+      let botText = chatbot.error;
+      if (responseData?.output) {
+        botText = responseData.output;
+      } else if (typeof data === 'string') {
+        botText = data;
+      }
 
-      setMessages(prev => [...prev, botMessage]);
-      
-      // Simulate data collection for FAQ building
-      collectCustomerData('chat', { user: userName, query: userMessage.text, response: responseText });
-
-    } catch (error) {
-      console.error("Chatbot Error:", error);
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        role: 'model',
-        text: chatbot.error
-      }]);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString() + '_bot',
+          role: 'model',
+          text: botText
+        }
+      ]);
+    } catch (err) {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString() + '_err',
+          role: 'model',
+          text: chatbot.error
+        }
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  /* ==============================
+      RENDER
+  ================================ */
   return (
     <>
-      {/* Floating Action Button */}
+      {/* Floating Button */}
       <motion.button
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="fixed bottom-6 right-6 z-[100] w-14 h-14 bg-brand-teal text-white rounded-full shadow-xl hover:bg-brand-teal/90 transition-colors flex items-center justify-center"
+        className="fixed bottom-6 right-6 z-[100] w-14 h-14 bg-brand-teal text-white rounded-full shadow-xl flex items-center justify-center hover:bg-teal-600 transition-colors"
         onClick={() => setIsOpen(!isOpen)}
-        aria-label={isOpen ? chatbot.close : chatbot.open}
       >
-        {isOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-7 h-7" />}
+        {isOpen ? <X /> : <MessageCircle />}
       </motion.button>
 
-      {/* Chat Window */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={{ opacity: 0, y: 30, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-6 z-[100] w-[90vw] md:w-[400px] max-h-[600px] h-[75vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+            exit={{ opacity: 0, y: 30, scale: 0.9 }}
+            className="fixed bottom-24 right-6 z-[100] w-[90vw] md:w-[400px] h-[75vh] bg-white rounded-2xl shadow-2xl border flex flex-col overflow-hidden font-sans"
           >
             {/* Header */}
-            <div className="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0">
-              <div className="flex items-center gap-3">
-                 <div className="bg-white/10 p-2 rounded-lg">
-                    <Sparkles className="w-5 h-5 text-brand-teal" />
-                 </div>
-                 <div>
-                   <h3 className="font-bold text-sm md:text-base">{chatbot.title}</h3>
-                   <span className="text-[10px] text-slate-300 flex items-center gap-1">
-                     <span className={`w-1.5 h-1.5 rounded-full ${isSessionExpired ? 'bg-red-500' : 'bg-green-400 animate-pulse'}`}></span>
-                     {isSessionExpired ? 'Offline' : 'Online · Gemini 2.5'}
-                   </span>
-                 </div>
+            <div className="bg-slate-900 text-white p-3 px-4 flex items-center justify-between shadow-md relative z-10">
+              <div className="flex items-center gap-2">
+                <Sparkles className="text-brand-teal w-5 h-5" />
+                <h3 className="font-bold text-sm tracking-wide">{chatbot.title}</h3>
               </div>
-              <button onClick={() => setIsOpen(false)} className="text-white/70 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+              
+              <div className="flex items-center gap-2">
+                {/* Petit bouton Reset discret (caché si la session est déjà expirée pour éviter doublon) */}
+                {messages.length > 1 && !isSessionExpired && (
+                  <button 
+                    onClick={handleNewChat}
+                    disabled={isLoading || isResetting}
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors border border-slate-700"
+                    title="Effacer l'historique"
+                  >
+                    <RefreshCw size={12} className={isResetting ? "animate-spin" : ""} />
+                    <span className="hidden sm:inline">Nouveau chat</span>
+                  </button>
+                )}
+
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  className="p-1 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
-            {/* CONTENT AREA: Form OR Chat */}
-            {!hasJoined ? (
-              // LEAD CAPTURE FORM
-              <div className="flex-1 flex flex-col p-6 bg-slate-50 overflow-y-auto">
-                 <div className="text-center mb-6 mt-2">
-                    <div className="w-14 h-14 bg-white rounded-full mx-auto flex items-center justify-center shadow-md mb-3 border border-slate-100">
-                       <MessageCircle className="w-7 h-7 text-brand-teal" />
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900 mb-1">{chatbot.form_title}</h3>
-                    <p className="text-xs text-slate-500">{chatbot.form_desc}</p>
-                 </div>
+            {/* Messages Area */}
+            <div className="flex-1 p-4 bg-slate-50 overflow-y-auto space-y-4 relative">
+              
+              <AnimatePresence>
+                {isResetting && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 z-20 bg-slate-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-3"
+                  >
+                    <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
+                    <p className="text-sm text-slate-500 font-medium">Nettoyage de la conversation...</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-                 <form onSubmit={handleJoin} className="space-y-3">
-                    <div>
-                       <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1 ml-1">
-                          {chatbot.form_name_label} <span className="text-red-500">*</span>
-                       </label>
-                       <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                          <input 
-                            type="text" 
-                            required
-                            value={userName}
-                            onChange={(e) => setUserName(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:border-brand-teal focus:ring-1 focus:ring-brand-teal outline-none transition-all"
-                            placeholder="John Doe"
-                          />
-                       </div>
+              {!isResetting && (
+                <>
+                  {/* Affichage des messages rapides uniquement au début */}
+                  {messages.length === 1 && messages[0].role === 'model' && (
+                    <div className="flex flex-wrap gap-2 mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                      {QUICK_MESSAGES.map((q, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleSend(q)}
+                          disabled={isLoading}
+                          className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-brand-teal hover:text-white hover:border-brand-teal transition-all shadow-sm"
+                        >
+                          {q}
+                        </button>
+                      ))}
                     </div>
+                  )}
 
-                    <div>
-                       <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1 ml-1">
-                          {chatbot.form_email_label} <span className="text-red-500">*</span>
-                       </label>
-                       <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                          <input 
-                            type="email" 
-                            required
-                            value={userEmail}
-                            onChange={(e) => setUserEmail(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:border-brand-teal focus:ring-1 focus:ring-brand-teal outline-none transition-all"
-                            placeholder="john@company.com"
-                          />
-                       </div>
-                    </div>
-
-                     <div>
-                       <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1 ml-1">
-                          {chatbot.form_phone_label} <span className="text-red-500">*</span>
-                       </label>
-                       <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                          <input 
-                            type="tel" 
-                            required
-                            value={userPhone}
-                            onChange={(e) => setUserPhone(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:border-brand-teal focus:ring-1 focus:ring-brand-teal outline-none transition-all"
-                            placeholder="+261 34..."
-                          />
-                       </div>
-                    </div>
-
-                     <div>
-                       <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1 ml-1">
-                          {chatbot.form_message_label}
-                       </label>
-                       <div className="relative">
-                          <FileText className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                          <textarea 
-                            rows={2}
-                            value={userDesc}
-                            onChange={(e) => setUserDesc(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:border-brand-teal focus:ring-1 focus:ring-brand-teal outline-none transition-all resize-none"
-                            placeholder="..."
-                          />
-                       </div>
-                    </div>
-
-                    <Button type="submit" className="w-full mt-4 py-3 bg-brand-teal text-white shadow-lg shadow-brand-teal/20">
-                       {chatbot.form_submit}
-                    </Button>
-                    
-                    <p className="text-center text-[10px] text-slate-400 mt-2">
-                       {chatbot.form_privacy}
-                    </p>
-                 </form>
-              </div>
-            ) : (
-              // CHAT INTERFACE
-              <>
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
-                  {messages.map((msg) => (
-                    <motion.div
+                  {messages.map(msg => (
+                    <div
                       key={msg.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      className={`flex ${
+                        msg.role === 'user' ? 'justify-end' : 'justify-start'
+                      } gap-2 group`}
                     >
+                      {msg.role === 'model' && (
+                        <div className="w-8 h-8 rounded-full bg-brand-teal text-white flex items-center justify-center text-xs font-bold shadow-sm shrink-0">
+                          R
+                        </div>
+                      )}
+
                       <div
-                        className={`max-w-[85%] rounded-2xl p-3 text-sm leading-relaxed ${
+                        className={`p-3 rounded-2xl text-sm max-w-[85%] shadow-sm leading-relaxed ${
                           msg.role === 'user'
-                            ? 'bg-brand-teal text-white rounded-tr-none shadow-md'
-                            : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none shadow-sm'
+                            ? 'bg-brand-teal text-white rounded-br-none'
+                            : 'bg-white border border-slate-100 text-slate-700 rounded-bl-none prose prose-sm prose-slate max-w-none'
                         }`}
                       >
-                        <div dangerouslySetInnerHTML={{ __html: msg.text.replace(/\n/g, '<br/>') }} />
-                        
-                        {/* Sources */}
-                        {msg.sources && msg.sources.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-slate-100 text-xs">
-                             <div className="font-bold text-slate-500 mb-1 flex items-center gap-1">
-                               <Link className="w-3 h-3" /> {chatbot.sources}
-                             </div>
-                             <div className="flex flex-col gap-1">
-                               {msg.sources.map((source, idx) => (
-                                 <a 
-                                   key={idx} 
-                                   href={source.uri} 
-                                   target="_blank" 
-                                   rel="noopener noreferrer"
-                                   className="text-brand-teal hover:underline truncate flex items-center gap-1"
-                                 >
-                                   <ExternalLink className="w-3 h-3" /> {source.title}
-                                 </a>
-                               ))}
-                             </div>
-                          </div>
-                        )}
+                        <ReactMarkdown components={{
+                           p: ({node, ...props}) => <p className="m-0" {...props} />,
+                           a: ({node, ...props}) => <a className="underline font-bold" {...props} />
+                        }}>
+                          {msg.text}
+                        </ReactMarkdown>
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
+
                   {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none p-3 shadow-sm flex items-center gap-2">
-                         <div className="flex gap-1">
-                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                         </div>
-                         <span className="text-xs text-slate-400 font-medium">{chatbot.thinking}</span>
+                    <div className="flex gap-2">
+                      <div className="w-8 h-8 rounded-full bg-brand-teal text-white flex items-center justify-center text-xs font-bold shrink-0">
+                        R
+                      </div>
+                      <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-none p-4 flex gap-1.5 items-center shadow-sm">
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:300ms]" />
                       </div>
                     </div>
                   )}
-                  <div ref={messagesEndRef} />
-                </div>
 
-                {/* Input Area */}
-                <div className="p-4 bg-white border-t border-slate-100">
-                  {isSessionExpired ? (
-                     <div className="text-center">
-                        <div className="flex items-center justify-center gap-2 text-amber-500 font-bold mb-3 text-sm">
-                           <Clock className="w-4 h-4" /> Session expirée (15 min)
-                        </div>
-                        <Button onClick={handleRestart} className="w-full py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 text-sm">
-                           <RefreshCw className="w-4 h-4 mr-2" /> Nouvelle Conversation
-                        </Button>
-                     </div>
-                  ) : (
-                    <>
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          handleSend();
-                        }}
-                        className="flex gap-2"
-                      >
-                        <input
-                          type="text"
-                          value={input}
-                          onChange={(e) => setInput(e.target.value)}
-                          placeholder={chatbot.placeholder}
-                          className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal text-sm text-slate-900 placeholder:text-slate-400 transition-all"
-                          disabled={isLoading}
-                        />
-                        <button
-                          type="submit"
-                          disabled={isLoading || !input.trim()}
-                          className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          <Send className="w-5 h-5" />
-                        </button>
-                      </form>
-                      <p className="text-[9px] text-center text-slate-400 mt-2">
-                        {chatbot.disclaimer}
-                      </p>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
+                  <div ref={messagesEndRef} />
+                </>
+              )}
+            </div>
+
+            {/* Input Area */}
+            <div className="p-3 border-t border-slate-100 bg-white relative">
+              
+              {/* Le bouton "Nouvelle conversation" qui apparaît lorsque la session est terminée */}
+              <AnimatePresence>
+                {isSessionExpired && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }} // Ajout d'une animation de sortie
+                    className="absolute bottom-[calc(100%+10px)] left-0 right-0 px-4 flex justify-center z-10"
+                  >
+                    <Button 
+                      onClick={handleNewChat} 
+                      className="bg-slate-800 hover:bg-slate-700 text-white shadow-lg border border-slate-700 w-full"
+                      disabled={isResetting}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Commencer une nouvelle conversation
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <form
+                onSubmit={e => {
+                  e.preventDefault();
+                  handleSend();
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  // Styles pour le champ désactivé
+                  className={`flex-1 px-4 py-2.5 rounded-xl border bg-slate-50 text-sm transition-all
+                    ${isSessionExpired 
+                      ? 'border-slate-100 text-slate-400 cursor-not-allowed placeholder:text-slate-300' 
+                      : 'border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal placeholder:text-slate-400'
+                    }`}
+                  placeholder={isSessionExpired ? "Conversation terminée" : chatbot.placeholder}
+                  disabled={isLoading || isResetting || isSessionExpired}
+                />
+                <button
+                  type="submit"
+                  // Le bouton Envoyer est désactivé si input vide, chargement, reset OU session expirée
+                  disabled={!input.trim() || isLoading || isResetting || isSessionExpired}
+                  className={`p-2.5 rounded-xl transition-colors shadow-sm text-white
+                    ${(!input.trim() || isLoading || isResetting || isSessionExpired)
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                      : 'bg-slate-900 hover:bg-slate-800'
+                    }`}
+                >
+                  <Send size={18} />
+                </button>
+              </form>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
