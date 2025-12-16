@@ -103,9 +103,9 @@ Besoin (Optionnel)
 
 > « Pour transmettre votre demande à l’équipe Kinva, merci de renseigner les informations suivantes :  
 >  
-> **Nom \***  
-> **Email \***  
-> **WhatsApp / Tel \***  
+> **Nom**  
+> **Email**  
+> **WhatsApp / Tel**  
 > **Besoin (Optionnel)** »
 
 ---
