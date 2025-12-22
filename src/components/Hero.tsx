@@ -1,10 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { Button } from './Button';
 import { useLanguage } from '../LanguageContext';
 
-export const Hero: React.FC = () => {
+interface HeroProps {
+    onOpenService: (id: string) => void;
+}
+
+export const Hero: React.FC<HeroProps> = ({ onOpenService }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const { content } = useLanguage();
   const slides = content.hero.slides;
@@ -12,7 +17,7 @@ export const Hero: React.FC = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % slides.length);
-    }, 8000); 
+    }, 12000); 
     return () => clearInterval(timer);
   }, [slides.length]);
 
@@ -21,6 +26,12 @@ export const Hero: React.FC = () => {
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
     }
+  };
+
+  const handlePrimaryClick = () => {
+     // Use the ID from the slide to determine which service overlay to open
+     const currentId = slides[currentIndex].id;
+     onOpenService(currentId);
   };
 
   return (
@@ -73,21 +84,26 @@ export const Hero: React.FC = () => {
                 
                 {/* Updated to render HTML for styling (colors/bold) */}
                 <div 
-                  className="text-lg md:text-2xl text-slate-200 mb-10 leading-relaxed font-medium max-w-2xl drop-shadow-md [&>span]:font-bold"
+                  className="text-lg md:text-2xl text-slate-200 mb-6 leading-relaxed font-medium max-w-2xl drop-shadow-md [&>span]:font-bold"
                   dangerouslySetInnerHTML={{ __html: slides[currentIndex].subtitle }}
                 />
 
+                {/* Added Description */}
+                <p className="text-base text-slate-400 mb-10 leading-relaxed max-w-xl font-medium">
+                  {slides[currentIndex].description}
+                </p>
+
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Button 
-                    onClick={() => scrollToId('#contact')} 
+                    onClick={handlePrimaryClick} 
                     className="h-14 px-8 text-base shadow-xl shadow-black/20 rounded-full bg-accent text-white hover:bg-accent-dark border-none"
                   >
-                    {content.hero.cta_primary}
+                    {slides[currentIndex].ctaText || content.hero.cta_primary}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                   <Button 
                     variant="outline" 
-                    onClick={() => scrollToId('#web')} 
+                    onClick={() => scrollToId(`#${slides[currentIndex].id}`)} 
                     className="h-14 px-8 text-base border-white/40 text-white hover:bg-white/10 hover:border-white bg-transparent rounded-full backdrop-blur-sm"
                   >
                     {content.hero.cta_secondary}

@@ -11,6 +11,9 @@ interface AdminDashboardProps {
   onClose: () => void;
 }
 
+// SECURITY: Only these emails can access the dashboard
+const ALLOWED_EMAILS = ["luc.rabe@widea.center"];
+
 const COLUMNS: { id: LeadStatus; label: string; color: string }[] = [
   { id: 'new', label: 'Nouveau', color: 'bg-blue-100 text-blue-800' },
   { id: 'contacted', label: 'Contacté', color: 'bg-yellow-100 text-yellow-800' },
@@ -50,8 +53,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
   const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-          setIsAuthenticated(true);
-          loadData();
+          // Double check email even if session exists
+          if (ALLOWED_EMAILS.includes(session.user.email || '')) {
+             setIsAuthenticated(true);
+             loadData();
+          } else {
+             await supabase.auth.signOut();
+             setAuthError("Email non autorisé.");
+          }
       }
   };
 
@@ -104,13 +113,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
       setIsLoading(true);
       setAuthError('');
 
+      // 1. Check Whitelist BEFORE sending to Supabase to save API calls/time
+      if (!ALLOWED_EMAILS.includes(emailInput)) {
+         setAuthError("Cet email n'a pas accès au dashboard.");
+         setIsLoading(false);
+         return;
+      }
+
+      // 2. Auth with Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
         email: emailInput,
         password: passwordInput,
       });
 
       if (error) {
-          setAuthError(error.message);
+          setAuthError("Mot de passe incorrect.");
           setIsLoading(false);
       } else {
           setIsAuthenticated(true);
@@ -237,7 +254,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                     </div>
                 </div>
                 <h2 className="text-2xl font-bold text-center text-slate-900 mb-2">Kinva Admin</h2>
-                <p className="text-center text-slate-500 mb-8 text-sm">Connexion Supabase</p>
+                <p className="text-center text-slate-500 mb-8 text-sm">Connexion Sécurisée (Luc Rabe Only)</p>
                 
                 <form onSubmit={handleLogin} className="space-y-4">
                     <div>
@@ -267,7 +284,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                         </div>
                     )}
                     <Button type="submit" disabled={isLoading} className="w-full bg-slate-900 text-white">
-                        {isLoading ? 'Connexion...' : 'Se Connecter'}
+                        {isLoading ? 'Vérification...' : 'Se Connecter'}
                     </Button>
                 </form>
                 <button onClick={onClose} className="w-full mt-4 text-slate-400 text-sm hover:text-slate-600">
@@ -300,13 +317,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                 <h2 className="font-bold text-lg leading-none">Kinva CRM</h2>
                 <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                   <span>Supabase Connected</span>
+                   <span>Live Database</span>
                    <span className="w-1 h-1 bg-slate-600 rounded-full"></span>
-                   <span>{leads.length} Leads</span>
+                   <span>{leads.length} Prospects</span>
                 </div>
              </div>
           </div>
           <div className="flex items-center gap-3">
+             <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-800 rounded-full text-xs font-bold text-slate-300">
+                <User className="w-3 h-3" />
+                Luc Rabe
+             </div>
              <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white" title="Déconnexion">
                 <LogOut className="w-5 h-5" />
              </button>

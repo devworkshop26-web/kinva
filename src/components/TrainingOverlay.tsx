@@ -1,11 +1,11 @@
 
-
-import React from 'react';
-import { motion } from 'framer-motion';
-import { X, GraduationCap, TrendingUp, CheckCircle2, ExternalLink, Presentation, MousePointerClick, Briefcase, LayoutTemplate, Trello, Slack, FileCheck, Coins } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, GraduationCap, TrendingUp, CheckCircle2, ExternalLink, Presentation, MousePointerClick, Briefcase, LayoutTemplate, Trello, Slack, FileCheck, Coins, Clock, Target, Calendar, List, ArrowRight, Users, Keyboard, Palette, Facebook, Headphones } from 'lucide-react';
 import { TRAINING_SOLUTIONS, TRAINING_FEATURES, TRAINING_PORTFOLIO_EXAMPLES, FMFP_INFO } from '../constants';
 import { Button } from './Button';
 import { useLanguage } from '../LanguageContext';
+import { TrainingCourse } from '../types';
 
 interface TrainingOverlayProps {
   isOpen: boolean;
@@ -15,6 +15,8 @@ interface TrainingOverlayProps {
 
 export const TrainingOverlay: React.FC<TrainingOverlayProps> = ({ isOpen, onClose, onContactClick }) => {
   const { content } = useLanguage();
+  const [selectedCourse, setSelectedCourse] = useState<TrainingCourse | null>(null);
+
   if (!isOpen) return null;
 
   // Find the translated text for this overlay from the context
@@ -173,21 +175,21 @@ export const TrainingOverlay: React.FC<TrainingOverlayProps> = ({ isOpen, onClos
               </div>
               <div className="flex-shrink-0 mt-6 md:mt-0 md:ml-auto">
                  <Button 
-                   onClick={() => { onClose(); onContactClick(); }}
-                   className="bg-amber-500 hover:bg-amber-600 text-white border-none shadow-lg shadow-amber-500/20"
+                   disabled
+                   className="bg-slate-300 text-slate-500 border-none shadow-none cursor-not-allowed hover:bg-slate-300"
                  >
-                   Monter un dossier
-                   <FileCheck className="ml-2 w-5 h-5" />
+                   Bientôt disponible
+                   <Clock className="ml-2 w-5 h-5" />
                  </Button>
               </div>
            </div>
         </motion.div>
 
-        {/* --- SOLUTIONS GRID --- */}
+        {/* --- SOLUTIONS GRID (CATALOGUE INTERACTIF) --- */}
         <div className="mb-24">
           <div className="text-center mb-12">
              <h3 className="text-3xl font-bold text-slate-900 mb-4">Catalogue de Formation</h3>
-             <p className="text-slate-600 max-w-2xl mx-auto">Des modules ciblés pour chaque niveau de l'entreprise.</p>
+             <p className="text-slate-600 max-w-2xl mx-auto">Cliquez sur un cours pour voir le programme détaillé.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -198,24 +200,126 @@ export const TrainingOverlay: React.FC<TrainingOverlayProps> = ({ isOpen, onClos
                   whileInView={{ y: 0, opacity: 1 }}
                   viewport={{ once: true }}
                   transition={{ delay: idx * 0.1 }}
-                  className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-lg hover:border-brand-coral/30 transition-all group flex flex-col"
+                  onClick={() => setSelectedCourse(sol)}
+                  className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:border-brand-coral/30 hover:-translate-y-1 transition-all group flex flex-col cursor-pointer relative"
                 >
                    <div className="w-12 h-12 rounded-xl bg-brand-coral/5 text-brand-coral flex items-center justify-center mb-4 group-hover:bg-brand-coral group-hover:text-white transition-colors">
                       <sol.icon className="w-6 h-6" />
                    </div>
-                   <h4 className="text-lg font-bold text-slate-900 mb-2">{sol.title}</h4>
+                   <h4 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-brand-coral transition-colors">{sol.title}</h4>
                    <p className="text-slate-600 text-sm leading-relaxed mb-4 flex-grow">{sol.description}</p>
+                   
+                   {/* Mini Badges */}
+                   <div className="flex gap-2 mb-4 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {sol.duration}</span>
+                      <span className="flex items-center gap-1"><Target className="w-3 h-3" /> {sol.level}</span>
+                   </div>
+
                    <div className="flex flex-wrap gap-2 mt-auto">
                       {sol.tags.map((tag, tIdx) => (
-                         <span key={tIdx} className="px-2 py-1 rounded-md bg-slate-50 text-slate-500 text-xs font-bold border border-slate-100">
+                         <span key={tIdx} className="px-2 py-1 rounded-md bg-slate-50 text-slate-500 text-xs font-bold border border-slate-100 group-hover:bg-brand-coral/10 group-hover:text-brand-coral transition-colors">
                             {tag}
                          </span>
                       ))}
+                   </div>
+                   
+                   <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <ExternalLink className="w-4 h-4 text-brand-coral" />
                    </div>
                 </motion.div>
              ))}
           </div>
         </div>
+
+         {/* --- COURSE DETAIL MODAL --- */}
+         <AnimatePresence>
+            {selectedCourse && (
+               <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                  {/* Backdrop */}
+                  <motion.div 
+                     initial={{ opacity: 0 }}
+                     animate={{ opacity: 1 }}
+                     exit={{ opacity: 0 }}
+                     onClick={() => setSelectedCourse(null)}
+                     className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                  />
+
+                  {/* Modal Card */}
+                  <motion.div 
+                     initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                     animate={{ opacity: 1, scale: 1, y: 0 }}
+                     exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                     className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+                  >
+                     <div className="p-6 md:p-8 bg-slate-50 border-b border-slate-100">
+                        <div className="flex justify-between items-start mb-4">
+                           <div className="w-14 h-14 rounded-2xl bg-brand-coral text-white flex items-center justify-center shadow-lg shadow-brand-coral/20">
+                              <selectedCourse.icon className="w-7 h-7" />
+                           </div>
+                           <button onClick={() => setSelectedCourse(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
+                              <X className="w-6 h-6" />
+                           </button>
+                        </div>
+                        <h3 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">{selectedCourse.title}</h3>
+                        <p className="text-slate-600 text-lg leading-snug">{selectedCourse.description}</p>
+                        
+                        <div className="flex flex-wrap gap-4 mt-6">
+                           <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-slate-200 text-sm font-bold text-slate-700 shadow-sm">
+                              <Clock className="w-4 h-4 text-brand-coral" />
+                              {selectedCourse.duration}
+                           </div>
+                           <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-slate-200 text-sm font-bold text-slate-700 shadow-sm">
+                              <Target className="w-4 h-4 text-brand-coral" />
+                              {selectedCourse.level}
+                           </div>
+                           <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-slate-200 text-sm font-bold text-slate-700 shadow-sm">
+                              <Users className="w-4 h-4 text-brand-coral" />
+                              {selectedCourse.targetAudience || "Tous publics"}
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar">
+                        <h4 className="font-bold text-slate-900 text-sm uppercase tracking-wider mb-6 flex items-center gap-2">
+                           <List className="w-4 h-4" /> Programme (Syllabus)
+                        </h4>
+                        
+                        <div className="space-y-6">
+                           {selectedCourse.syllabus ? (
+                              selectedCourse.syllabus.map((module, idx) => (
+                                 <div key={idx} className="relative pl-6 border-l-2 border-slate-100 last:border-0 pb-2">
+                                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-50 border-2 border-brand-coral"></div>
+                                    <h5 className="font-bold text-lg text-slate-900 mb-3 leading-none">{module.title}</h5>
+                                    <ul className="space-y-2">
+                                       {module.topics.map((topic, tIdx) => (
+                                          <li key={tIdx} className="flex items-start gap-2 text-slate-600 text-sm">
+                                             <CheckCircle2 className="w-4 h-4 text-brand-coral/50 shrink-0 mt-0.5" />
+                                             <span className="leading-relaxed">{topic}</span>
+                                          </li>
+                                       ))}
+                                    </ul>
+                                 </div>
+                              ))
+                           ) : (
+                              <p className="text-slate-500 italic">Programme détaillé disponible sur demande.</p>
+                           )}
+                        </div>
+                     </div>
+
+                     <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                        <Button variant="outline" onClick={() => setSelectedCourse(null)}>Fermer</Button>
+                        <Button 
+                           onClick={() => { setSelectedCourse(null); onClose(); onContactClick(); }}
+                           className="bg-brand-coral text-white hover:bg-brand-coral/90 shadow-lg shadow-brand-coral/20"
+                        >
+                           Demander un devis
+                           <ArrowRight className="w-4 h-4 ml-2" />
+                        </Button>
+                     </div>
+                  </motion.div>
+               </div>
+            )}
+         </AnimatePresence>
 
          {/* --- PORTFOLIO EXAMPLES --- */}
          <div className="mb-24">

@@ -25,9 +25,14 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSection = 'home' }) => {
   const hoverBgClass = isDarkSection ? 'hover:bg-white/10' : 'hover:bg-slate-100';
 
   useEffect(() => {
+    // Because we use overflow on html/body for snap, we track scroll on document/window differently
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
+      // Check both window and document element scroll top
+      const scrollPos = window.scrollY || document.documentElement.scrollTop;
+      setIsScrolled(scrollPos > 10);
     };
+    
+    // Add listener to window and potentially specific container if needed
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -50,6 +55,18 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSection = 'home' }) => {
     e.preventDefault();
     scrollToSection(href);
   };
+  
+  const handleLogoClick = (e: React.MouseEvent) => {
+      e.preventDefault();
+      // Force scroll to top on the document element which holds the overflow
+      const home = document.getElementById('home');
+      if (home) {
+        home.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      setIsOpen(false);
+  };
 
   const toggleLanguage = () => {
     setLanguage(language === 'fr' ? 'en' : 'fr');
@@ -68,9 +85,9 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSection = 'home' }) => {
           <div className="flex justify-between items-center">
             {/* Logo */}
             <a 
-              href="#" 
+              href="#home" 
               className="flex-shrink-0 flex items-center cursor-pointer z-50 group"
-              onClick={(e) => { e.preventDefault(); window.scrollTo({top: 0, behavior: 'smooth'}); setIsOpen(false); }}
+              onClick={handleLogoClick}
             >
               {/* If scrolled, always dark logo. If not scrolled, depends on section */}
               {isScrolled ? <Logo /> : <Logo lightMode={isDarkSection} />}
