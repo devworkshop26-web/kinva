@@ -14,8 +14,8 @@ const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ child
 const useLanguage = () => ({
   content: {
     chatbot: {
-      title: "RABE IA",
-      welcome: "Bonjour ! Je suis Rabe IA, le chatbot officiel de Kinva. Comment puis-je vous aider ?",
+      title: "RAKOTO IA",
+      welcome: "Bonjour ! Je suis Rakoto IA, le chatbot officiel de Kinva. Comment puis-je vous aider ?",
       placeholder: "Écrivez votre message...",
       error: "Une erreur est survenue lors du traitement de votre demande."
     }
@@ -33,7 +33,7 @@ interface Message {
 ================================ */
 const BRAND_COLOR = 'teal-600';
 // URL de Webhook harmonisée
-const N8N_WEBHOOK_URL = 'https://devworkshop.app.n8n.cloud/webhook/chat';
+const N8N_WEBHOOK_URL = 'https://kinva.app.n8n.cloud/webhook/chat';
 
 // AJOUTÉ : Pour garantir que Tailwind détecte toutes les classes
 const BRAND_CLASSES = {
