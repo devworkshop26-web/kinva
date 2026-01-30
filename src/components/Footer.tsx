@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CONTACT_INFO } from '../constants';
 import { Button } from './Button';
 import { Logo } from './Logo';
-import { Mail, Phone, MapPin, ArrowUp, Send, Facebook, Linkedin, Twitter, Lock, CheckCircle2, Loader2, Calendar, Building, Map, MessageCircle } from 'lucide-react';
+import { Mail, Phone, MapPin, ArrowUp, Send, Facebook, Linkedin, Instagram, Calendar, Twitter, Lock, CheckCircle2, Loader2, Clock, Building, Map, MessageCircle } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 import { supabase } from '../supabaseClient';
 
@@ -35,24 +35,6 @@ export const Contact: React.FC<ContactProps> = ({ onOpenAdmin }) => {
     consent: false,
     isWhatsapp: false
   });
-
-  // Listen for prefill events (from Quote Simulator)
-  useEffect(() => {
-    const handlePrefill = (event: CustomEvent) => {
-        const details = event.detail;
-        if (details) {
-            setFormData(prev => ({
-                ...prev,
-                subject: 'web', // Set to web category
-                message: details.message
-            }));
-            // Smoothly scroll to the message part or highlight it if needed
-        }
-    };
-
-    window.addEventListener('prefill-contact' as any, handlePrefill);
-    return () => window.removeEventListener('prefill-contact' as any, handlePrefill);
-  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { id, value, type } = e.target;

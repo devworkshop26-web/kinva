@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronRight, Globe, AlertCircle } from 'lucide-react';
-import { Button } from './Button';
+import { Menu, X, Globe } from 'lucide-react';
 import { Logo } from './Logo';
 import { useLanguage } from '../LanguageContext';
 
@@ -10,29 +9,23 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeSection = 'home' }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false); // Mobile Menu State
   const [isScrolled, setIsScrolled] = useState(false);
+  
   const { language, setLanguage, content } = useLanguage();
 
   // Define which sections have dark backgrounds (requiring white text)
   const darkSections = ['home', 'approach'];
   const isDarkSection = darkSections.includes(activeSection);
 
-  // Text color logic: White if on dark section OR mobile menu is open (we'll handle mobile menu bg separately), Slate if on light section
-  // BUT: if mobile menu is open, we want dark text usually because mobile menu is white.
-  // Let's stick to desktop logic first.
   const textColorClass = isDarkSection ? 'text-white' : 'text-slate-900';
   const hoverBgClass = isDarkSection ? 'hover:bg-white/10' : 'hover:bg-slate-100';
 
   useEffect(() => {
-    // Because we use overflow on html/body for snap, we track scroll on document/window differently
     const handleScroll = () => {
-      // Check both window and document element scroll top
       const scrollPos = window.scrollY || document.documentElement.scrollTop;
       setIsScrolled(scrollPos > 10);
     };
-    
-    // Add listener to window and potentially specific container if needed
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -51,14 +44,13 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSection = 'home' }) => {
     }
   };
 
-  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string | undefined) => {
     e.preventDefault();
-    scrollToSection(href);
+    if (href) scrollToSection(href);
   };
   
   const handleLogoClick = (e: React.MouseEvent) => {
       e.preventDefault();
-      // Force scroll to top on the document element which holds the overflow
       const home = document.getElementById('home');
       if (home) {
         home.scrollIntoView({ behavior: 'smooth' });
@@ -89,12 +81,11 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSection = 'home' }) => {
               className="flex-shrink-0 flex items-center cursor-pointer z-50 group"
               onClick={handleLogoClick}
             >
-              {/* If scrolled, always dark logo. If not scrolled, depends on section */}
               {isScrolled ? <Logo /> : <Logo lightMode={isDarkSection} />}
             </a>
             
             {/* Desktop Menu */}
-            <div className="hidden md:flex items-center space-x-1">
+            <div className="hidden md:flex items-center space-x-2">
               {content.nav.links.map((link) => (
                 <a
                   key={link.name}
@@ -163,11 +154,10 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSection = 'home' }) => {
                   key={link.name}
                   href={link.href}
                   onClick={(e) => handleLinkClick(e, link.href)}
-                  className="flex items-center justify-between p-5 text-2xl font-bold text-slate-900 hover:text-accent transition-colors border-b border-slate-100 active:bg-slate-50 rounded-xl"
+                  className="block p-5 text-3xl font-bold text-slate-900 hover:text-brand-teal transition-colors border-b border-slate-100 active:bg-slate-50 rounded-xl"
                   style={{ transitionDelay: `${idx * 50}ms` }}
                 >
                   {link.name}
-                  <ChevronRight className="w-6 h-6 text-slate-300" />
                 </a>
               ))}
             </div>

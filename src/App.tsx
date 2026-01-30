@@ -14,8 +14,6 @@ import { Chatbot } from './components/Chatbot';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AnimatePresence } from 'framer-motion';
 import { LanguageProvider, useLanguage } from './LanguageContext';
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Documentation from "./components/Documentation";
 
 // Create a wrapper component to consume the context
 const MainContent: React.FC = () => {
@@ -58,7 +56,13 @@ const MainContent: React.FC = () => {
     } else if (serviceId === 'ai') {
       setIsAiOpen(true);
     } else if (serviceId === 'training') {
-      setIsTrainingOpen(true);
+      // setIsTrainingOpen(true); // DISABLED
+    } else if (serviceId === 'overview') {
+      // For the global overview slide, scroll to the services overview section
+      const element = document.querySelector('#expertise');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
     } else {
       const element = document.querySelector('#contact');
       if (element) {
@@ -81,7 +85,8 @@ const MainContent: React.FC = () => {
       <Navbar activeSection={activeSection} />
       
       <main>
-        <Hero />
+        {/* Passed handler to Hero for dynamic button clicks */}
+        <Hero onOpenService={handleServiceCtaClick} />
         
         {/* Detailed Service Sections */}
         {content.overlays.services.map((service, index) => (
@@ -127,6 +132,7 @@ const MainContent: React.FC = () => {
             onContactClick={scrollToContact}
           />
         )}
+        {/* 
         {isTrainingOpen && (
           <TrainingOverlay 
             isOpen={isTrainingOpen} 
@@ -134,6 +140,7 @@ const MainContent: React.FC = () => {
             onContactClick={scrollToContact}
           />
         )}
+        */}
         {isAdminOpen && (
           <AdminDashboard
             isOpen={isAdminOpen}
@@ -148,17 +155,7 @@ const MainContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <LanguageProvider>
-      <BrowserRouter>
-        <Routes>
-
-          {/* PAGE PRINCIPALE */}
-          <Route path="/" element={<MainContent />} />
-
-          {/* DOCUMENTATION */}
-          <Route path="/documentation" element={<Documentation />} />
-
-        </Routes>
-      </BrowserRouter>
+      <MainContent />
     </LanguageProvider>
   );
 };
