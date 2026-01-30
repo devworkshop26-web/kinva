@@ -1,25 +1,49 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-// IMPORTS AJOUTÉS/CORRIGÉS pour le Markdown
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm'; 
+'use client';
 
-// Simuler les dépendances manquantes pour que le code soit auto-suffisant
-const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, className, ...props }) => (
-  <button className={`flex items-center justify-center rounded-xl font-semibold text-sm transition-all h-10 ${className}`} {...props}>
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  MessageCircle,
+  X,
+  Send,
+  RefreshCw,
+  Loader2,
+  Globe,
+  Zap,
+  Settings,
+  Briefcase,
+  Lightbulb,
+  Sparkles,
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+/* ==============================
+    COMPOSANTS UI SIMULÉS
+================================ */
+const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({
+  children,
+  className,
+  ...props
+}) => (
+  <button
+    className={`flex items-center justify-center rounded-xl font-semibold text-sm transition-all h-10 ${className}`}
+    {...props}
+  >
     {children}
   </button>
 );
+
 const useLanguage = () => ({
   content: {
     chatbot: {
-      title: "RAKOTO IA",
-      welcome: "Bonjour ! Je suis Rakoto IA, le chatbot officiel de Kinva. Comment puis-je vous aider ?",
-      placeholder: "Écrivez votre message...",
-      error: "Une erreur est survenue lors du traitement de votre demande."
-    }
-  }
+      title: 'Rakoto IA',
+      welcome:
+        'Bonjour ! Je suis Rakoto IA, le chatbot officiel de Kinva. Comment puis-je vous aider ?',
+      placeholder: 'Écrivez votre message...',
+      error: "Une erreur est survenue lors du traitement de votre demande.",
+    },
+  },
 });
 
 interface Message {
@@ -29,60 +53,73 @@ interface Message {
 }
 
 /* ==============================
-    CONFIG
+    CONFIG (COULEURS & STYLE)
 ================================ */
-const BRAND_COLOR = 'teal-600';
-// URL de Webhook harmonisée
-const N8N_WEBHOOK_URL = 'https://kinva.app.n8n.cloud/webhook/chat';
-
-// AJOUTÉ : Pour garantir que Tailwind détecte toutes les classes
 const BRAND_CLASSES = {
-  bg: `bg-${BRAND_COLOR}`, // Ex: bg-teal-600
-  text: `text-${BRAND_COLOR}`, // Ex: text-teal-600
-  ring: `focus:ring-2 focus:ring-${BRAND_COLOR}/20 focus:border-${BRAND_COLOR}`,
-  userBg: `bg-${BRAND_COLOR} text-white rounded-br-none`,
+  bg: 'bg-teal-600',
+  bgHover: 'hover:bg-teal-700',
+  text: 'text-teal-600',
+  ring: 'focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600',
+  userBubble: 'bg-teal-600 text-white rounded-br-none shadow-md shadow-teal-900/10',
 } as const;
 
-
+const N8N_WEBHOOK_URL = 'https://kinva.app.n8n.cloud/webhook/chat';
 const STORAGE_KEY = 'kinva_chat_messages';
 const SESSION_ID_KEY = 'kinva_chat_session';
-// Clé pour persister l'état "terminé"
 const SESSION_STATUS_KEY = 'kinva_chat_status';
 
 const QUICK_MESSAGES = [
-  'Je veux créer un site web',
-  'Quels sont vos tarifs ?',
-  'J’ai besoin d’un chatbot IA',
-  'Je veux un devis',
-  'Comment fonctionne Rabe IA ?',
-  'Services Kinva'
+  { text: 'Je veux créer un site web', icon: Globe },
+  { text: 'Quels sont vos tarifs ?', icon: Zap },
+  { text: "J'ai besoin d'un chatbot IA", icon: MessageCircle },
+  { text: 'Je veux un devis', icon: Briefcase },
+  { text: 'Comment fonctionne Rakoto IA ?', icon: Lightbulb },
+  { text: 'Services Kinva', icon: Settings },
 ];
 
 /* ==============================
-    COMPONENT
+   ✅ FIX AFFICHAGE \n / /n
+   - Convertit "\\n" ou "/n" en vrais retours + hard-break Markdown
+================================ */
+const normalizeNewlinesForMarkdown = (raw: string) => {
+  if (typeof raw !== 'string') return '';
+  let text = raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\/n/g, '\n');
+
+  const looksLikePlainLines =
+    text.includes('\n') &&
+    !text.includes('\n\n') &&
+    !/^\s*[-*+]\s+/m.test(text) &&
+    !/^\s*\d+\.\s+/m.test(text) &&
+    !/```/.test(text);
+
+  if (looksLikePlainLines) {
+    text = text.replace(/\n/g, '  \n');
+  }
+
+  return text;
+};
+
+/* ==============================
+    MAIN COMPONENT
 ================================ */
 export const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
   const [isResetting, setIsResetting] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-
-  // État pour gérer le verrouillage du chat après une conversion
   const [isSessionExpired, setIsSessionExpired] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null); // ✅ AJOUT: ref du container scroll
   const { content } = useLanguage();
   const { chatbot } = content;
 
-  // Détermine si c'est l'écran d'accueil (uniquement le message de bienvenue)
   const isWelcomeScreen = messages.length === 1 && messages[0].id === 'rabe-welcome';
 
-
-  /* ==============================
-      SESSION ID & INIT
-  ================================ */
   const getSessionId = () => {
     let id = localStorage.getItem(SESSION_ID_KEY);
     if (!id) {
@@ -93,80 +130,60 @@ export const Chatbot: React.FC = () => {
   };
 
   useEffect(() => {
-    // 1. Charger les messages
     const savedMessages = localStorage.getItem(STORAGE_KEY);
     if (savedMessages) {
       const loadedMessages = JSON.parse(savedMessages);
-      if (loadedMessages.length > 0) {
-        setMessages(loadedMessages);
-      } else {
-        // Si le localStorage est vide, ajouter le message de bienvenue
-        setMessages([{ id: 'rabe-welcome', role: 'model', text: chatbot.welcome }]);
-      }
-    } else if (chatbot?.welcome) {
+      setMessages(
+        loadedMessages.length > 0
+          ? loadedMessages
+          : [{ id: 'rabe-welcome', role: 'model', text: chatbot.welcome }]
+      );
+    } else {
       setMessages([{ id: 'rabe-welcome', role: 'model', text: chatbot.welcome }]);
     }
 
-    // 2. Charger l'état de la session (si elle était déjà finie)
     const savedStatus = localStorage.getItem(SESSION_STATUS_KEY);
-    if (savedStatus === 'finished') {
-      setIsSessionExpired(true);
-    }
-  }, [chatbot?.welcome]);
+    if (savedStatus === 'finished') setIsSessionExpired(true);
+  }, [chatbot.welcome]);
 
   useEffect(() => {
-    // Sauvegarder les messages (sauf si c'est l'écran de bienvenue seul)
     if (messages.length > 1 || (messages.length === 1 && messages[0].id !== 'rabe-welcome')) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-    } else if (messages.length === 1 && messages[0].id === 'rabe-welcome' && localStorage.getItem(STORAGE_KEY) !== null) {
-      // Si on revient à l'état initial, on peut nettoyer le localStorage
-      localStorage.removeItem(STORAGE_KEY);
     }
   }, [messages]);
 
+  // ✅ MODIF: si on est sur l’écran d’accueil (Quick messages), scroll vers le haut
+  // sinon, scroll en bas comme avant
   useEffect(() => {
-    // Scroll au dernier message
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isOpen, isResetting, isSessionExpired]);
+    if (!isOpen) return;
 
-  /* ==============================
-      NEW CHAT LOGIC
-  ================================ */
+    if (isWelcomeScreen) {
+      scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isOpen, isLoading, isWelcomeScreen]);
+
   const handleNewChat = () => {
     setIsResetting(true);
-
-    // Délai pour l'animation de reset
     setTimeout(() => {
-      // Tout nettoyer
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(SESSION_ID_KEY);
       localStorage.removeItem(SESSION_STATUS_KEY);
-
-      setMessages([
-        { id: 'rabe-welcome', role: 'model', text: chatbot.welcome }
-      ]);
-
-      setIsSessionExpired(false); // Débloque l'input
+      setMessages([{ id: 'rabe-welcome', role: 'model', text: chatbot.welcome }]);
+      setIsSessionExpired(false);
       setIsResetting(false);
     }, 800);
   };
 
-  /* ==============================
-      SEND MESSAGE
-  ================================ */
   const handleSend = async (overrideInput?: string) => {
     if (isLoading || isResetting || isSessionExpired) return;
-
     const text = typeof overrideInput === 'string' ? overrideInput : input;
-    if (!text || !text.trim()) return;
+    if (!text?.trim()) return;
 
     const sessionId = getSessionId();
-
-    setMessages(prev => [
-      ...prev,
-      { id: Date.now().toString(), role: 'user', text }
-    ]);
-
+    setMessages((prev) => [...prev, { id: Date.now().toString(), role: 'user', text }]);
     setInput('');
     setIsLoading(true);
 
@@ -174,68 +191,47 @@ export const Chatbot: React.FC = () => {
       const res = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          chatInput: text
-        })
+        body: JSON.stringify({ sessionId, chatInput: text }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) throw new Error('Workflow error');
-
-      // Normalisation de la réponse (peut être un array [0] ou un objet direct)
       const responseData = Array.isArray(data) ? data[0] : data;
 
-      // --- LOGIQUE DE FIN DE CONVERSATION ---
       if (responseData?.conversation_finished === true) {
         setIsSessionExpired(true);
         localStorage.setItem(SESSION_STATUS_KEY, 'finished');
       }
-      // ---------------------------------------
 
-      let botText = chatbot.error;
-      if (responseData?.output) {
-        botText = responseData.output;
-      } else if (typeof data === 'string') {
-        botText = data;
-      }
+      const rawBotText =
+        responseData?.output || (typeof data === 'string' ? data : chatbot.error);
 
-      setMessages(prev => [
+      const botText = normalizeNewlinesForMarkdown(rawBotText);
+
+      setMessages((prev) => [
         ...prev,
-        {
-          id: Date.now().toString() + '_bot',
-          role: 'model',
-          text: botText
-        }
+        { id: Date.now().toString() + '_bot', role: 'model', text: botText },
       ]);
     } catch (err) {
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
-        {
-          id: Date.now().toString() + '_err',
-          role: 'model',
-          text: chatbot.error
-        }
+        { id: Date.now().toString() + '_err', role: 'model', text: chatbot.error },
       ]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  /* ==============================
-      RENDER
-  ================================ */
   return (
     <>
-      {/* Floating Button */}
+      {/* Bouton Flottant */}
       <motion.button
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className={`fixed bottom-6 right-6 z-[100] w-14 h-14 ${BRAND_CLASSES.bg} text-white rounded-full shadow-xl flex items-center justify-center hover:bg-teal-700 transition-colors`}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        className={`fixed bottom-6 right-6 z-[100] w-14 h-14 ${BRAND_CLASSES.bg} ${BRAND_CLASSES.bgHover} text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-300`}
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isOpen ? <X /> : <MessageCircle />}
+        {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
       </motion.button>
 
       <AnimatePresence>
@@ -244,217 +240,215 @@ export const Chatbot: React.FC = () => {
             initial={{ opacity: 0, y: 30, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 30, scale: 0.9 }}
-            className="fixed bottom-24 right-6 z-[100] w-[90vw] md:w-[400px] h-[75vh] bg-white rounded-2xl shadow-2xl border flex flex-col overflow-hidden font-sans"
+            className="fixed bottom-24 right-6 z-[100] w-[90vw] md:w-[420px] h-[75vh] max-h-[calc(100vh-8rem)] bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
           >
-            {/* Header */}
-            <div className="bg-slate-900 text-white p-3 px-4 flex items-center justify-between shadow-md relative z-10">
-              <div className="flex items-center gap-2">
-                <Sparkles className={`${BRAND_CLASSES.text} w-5 h-5`} />
-                <h3 className="font-bold text-sm tracking-wide">{chatbot.title}</h3>
+            {/* --- HEADER --- */}
+            <div className="bg-slate-900 text-white p-3 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-teal-500/10 to-transparent pointer-events-none" />
+
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full border-2 border-slate-700 overflow-hidden bg-slate-800">
+                      <img
+                        src="/Rakoto.png"
+                        alt="Avatar"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+
+                    <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center shadow-sm">
+                      <Sparkles size={12} className="text-teal-300" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-sm leading-none mb-1">{chatbot.title}</h3>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {messages.length > 1 && !isSessionExpired && (
+                    <div className="relative group">
+                      <button
+                        onClick={handleNewChat}
+                        className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white"
+                        title="Nouveau chat"
+                      >
+                        <RefreshCw size={18} className={isResetting ? 'animate-spin' : ''} />
+                      </button>
+
+                      <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="px-2.5 py-1.5 rounded-xl border border-slate-700/70 bg-slate-900/95 text-[11px] font-semibold text-slate-100 shadow-xl whitespace-nowrap">
+                          Nouveau chat
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setIsOpen(false)}
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* Bouton Reset (visible sauf si c'est l'écran de bienvenue seul) */}
-                {messages.length > 1 && !isSessionExpired && (
-                  <button
-                    onClick={handleNewChat}
-                    disabled={isLoading || isResetting}
-                    className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors border border-slate-700"
-                    title="Effacer l'historique"
-                  >
-                    <RefreshCw size={12} className={isResetting ? "animate-spin" : ""} />
-                    <span className="hidden sm:inline">Nouveau chat</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
-                >
-                  <X size={20} />
-                </button>
+              <div className="relative z-10 mt-1.5 flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-60" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                </span>
+                <span className="text-[10px] uppercase tracking-wider text-teal-400 font-bold">
+                  En ligne
+                </span>
               </div>
             </div>
 
-            {/* Messages Area : Correction du pb-24 à pb-4 */}
-            <div className="flex-1 p-4 pb-4 bg-slate-50 overflow-y-auto space-y-4 relative">
-
-              <AnimatePresence>
-                {isResetting && (
+            {/* Zone de Messages */}
+            <div
+              ref={scrollContainerRef} // ✅ AJOUT: permet le scrollTo top smooth
+              className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50"
+            >
+              <AnimatePresence mode="wait">
+                {isResetting ? (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="absolute inset-0 z-20 bg-slate-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-3"
+                    className="h-full flex items-center justify-center"
                   >
-                    <Loader2 className={`w-8 h-8 ${BRAND_CLASSES.text} animate-spin`} />
+                    <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
                   </motion.div>
-                )}
-              </AnimatePresence>
-
-              {!isResetting && (
-                <>
-                  {/* --- ÉCRAN D'ACCUEIL --- */}
-                  {isWelcomeScreen ? (
-                    <div className="h-full flex flex-col justify-between items-center text-center">
-                      {/* Message de bienvenue (En haut) */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5 }}
-                        className="flex flex-col items-center gap-4 pt-10"
-                      >
-                        <div className={`w-12 h-12 rounded-full ${BRAND_CLASSES.bg} text-white flex items-center justify-center text-lg font-extrabold shadow-md`}>
-                          R
-                        </div>
-                        <p className="text-lg font-semibold text-slate-800 px-4">
-                          {messages[0].text}
-                        </p>
-                      </motion.div>
-
-                      {/* Suggestions (En bas) */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: 0.2 }}
-                        className="w-full px-4"
-                      >
-                        <p className="text-xs text-slate-500 font-medium mb-3">Questions fréquentes :</p>
-
-                        <div className="grid grid-cols-2 gap-2 mb-2">
+                ) : (
+                  <>
+                    {isWelcomeScreen ? (
+                      <div className="flex flex-col items-center text-center space-y-6 py-6">
+                        <motion.div
+                          initial={{ scale: 0.9, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="space-y-3"
+                        >
+                          <img
+                            src="/Rakoto.png"
+                            className="w-20 h-20 rounded-full mx-auto shadow-xl border-4 border-white"
+                            alt="Rakoto"
+                          />
+                          <h2 className="text-xl font-bold text-slate-800">
+                            Comment puis-je vous aider ?
+                          </h2>
+                          <p className="text-sm text-slate-500 px-6">{chatbot.welcome}</p>
+                        </motion.div>
+                        <div className="grid grid-cols-1 gap-2 w-full px-2">
                           {QUICK_MESSAGES.map((q, i) => (
-                            <motion.button
+                            <button
                               key={i}
-                              onClick={() => handleSend(q)}
-                              disabled={isLoading}
-                              initial={{ opacity: 0, scale: 0.95 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ duration: 0.3, delay: 0.1 * i + 0.3 }}
-                              className={`w-full px-3 py-2 text-xs font-medium rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-all shadow-sm text-left`}
+                              onClick={() => handleSend(q.text)}
+                              className="flex items-center gap-3 p-3 text-left text-sm font-medium bg-white border border-slate-200 rounded-2xl hover:border-teal-500 hover:bg-teal-50/50 transition-all shadow-sm group"
                             >
-                              {q}
-                            </motion.button>
+                              <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-teal-100 transition-colors">
+                                <q.icon
+                                  size={16}
+                                  className="text-slate-600 group-hover:text-teal-600"
+                                />
+                              </div>
+                              {q.text}
+                            </button>
                           ))}
                         </div>
-                      </motion.div>
-                    </div>
-                  ) : (
-                    <>
-                      {messages.map(msg => (
+                      </div>
+                    ) : (
+                      messages.map((msg) => (
                         <div
                           key={msg.id}
-                          className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'
-                            } gap-2 group`}
+                          className={`flex ${
+                            msg.role === 'user' ? 'justify-end' : 'justify-start'
+                          } gap-2`}
                         >
                           {msg.role === 'model' && (
-                            <div className={`w-8 h-8 rounded-full ${BRAND_CLASSES.bg} text-white flex items-center justify-center text-xs font-bold shadow-sm shrink-0`}>
-                              R
-                            </div>
+                            <img
+                              src="/Rakoto.png"
+                              className="w-8 h-8 rounded-full shadow-sm self-end mb-1"
+                              alt="Bot"
+                            />
                           )}
-
                           <div
-                            className={`p-3 rounded-2xl text-sm max-w-[85%] shadow-sm leading-relaxed ${msg.role === 'user'
-                              ? BRAND_CLASSES.userBg
-                              // Pour les messages du modèle
-                              : 'bg-white border border-slate-100 text-slate-700 rounded-bl-none prose prose-sm prose-slate max-w-none'
-                              }`}
+                            className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                              msg.role === 'user'
+                                ? BRAND_CLASSES.userBubble
+                                : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'
+                            }`}
                           >
-                            <ReactMarkdown 
-                                remarkPlugins={[remarkGfm]}
-                                components={{
-                                p: ({ node, ...props }) => <p className="m-0" {...props} />,
-                                a: ({ node, ...props }) => <a className="underline font-bold" {...props} />,
-                                strong: ({ node, ...props }) => <strong className="font-bold text-slate-900" {...props} />,
-                                }}
-                            >
-                              {msg.text}
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.role === 'model'
+                                ? normalizeNewlinesForMarkdown(msg.text)
+                                : msg.text}
                             </ReactMarkdown>
                           </div>
                         </div>
-                      ))}
+                      ))
+                    )}
 
-                      {isLoading && (
-                        <div className="flex gap-2">
-                          <div className={`w-8 h-8 rounded-full ${BRAND_CLASSES.bg} text-white flex items-center justify-center text-xs font-bold shrink-0`}>
-                            R
-                          </div>
-                          <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-none p-4 flex gap-1.5 items-center shadow-sm">
-                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
-                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:300ms]" />
-                          </div>
+                    {isLoading && (
+                      <div className="flex gap-2">
+                        <img
+                          src="/Rakoto.png"
+                          className="w-8 h-8 rounded-full animate-pulse"
+                          alt="Bot"
+                        />
+                        <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-none px-4 py-3 flex gap-1">
+                          <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" />
+                          <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce [animation-delay:0.2s]" />
+                          <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce [animation-delay:0.4s]" />
                         </div>
-                      )}
+                      </div>
+                    )}
 
-                      <div ref={messagesEndRef} />
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Input Area : Le bouton est maintenant dans le flux (pas d'absolute) */}
-            <div className="p-3 border-t border-slate-100 bg-white relative">
-              
-              <AnimatePresence>
-                {isSessionExpired ? (
-                  // Si la session est expirée, afficher le bouton de nouvelle conversation dans le flux
-                  <motion.div
-                    key="new-chat-button"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="flex justify-center" // Centrage visuel
-                  >
-                    <Button
-                      onClick={handleNewChat}
-                      className="bg-slate-800 hover:bg-slate-700 text-white shadow-lg border border-slate-700 w-full"
-                      disabled={isResetting}
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Nouvelle conversation
-                    </Button>
-                  </motion.div>
-                ) : (
-                  // Sinon, afficher le formulaire d'envoi normal
-                  <motion.form
-                    key="chat-form"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    onSubmit={e => {
-                      e.preventDefault();
-                      handleSend();
-                    }}
-                    className="flex gap-2"
-                  >
-                    <input
-                      value={input}
-                      onChange={e => setInput(e.target.value)}
-                      // Styles pour le champ désactivé
-                      className={`flex-1 px-4 py-2.5 rounded-xl border bg-slate-50 text-sm transition-all
-                        ${isLoading || isResetting || isSessionExpired
-                          ? 'border-slate-100 text-slate-400 cursor-not-allowed placeholder:text-slate-300'
-                          : `border-slate-200 focus:outline-none ${BRAND_CLASSES.ring} placeholder:text-slate-400`
-                        }`}
-                      placeholder={chatbot.placeholder}
-                      disabled={isLoading || isResetting || isSessionExpired}
-                    />
-                    <button
-                      type="submit"
-                      // Le bouton Envoyer est désactivé si input vide, chargement, reset OU session expirée
-                      disabled={!input.trim() || isLoading || isResetting || isSessionExpired}
-                      className={`p-2.5 rounded-xl transition-colors shadow-sm text-white
-                        ${(!input.trim() || isLoading || isResetting || isSessionExpired)
-                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                          : 'bg-slate-900 hover:bg-slate-800'
-                        }`}
-                    >
-                      <Send size={18} />
-                    </button>
-                  </motion.form>
+                    <div ref={messagesEndRef} />
+                  </>
                 )}
               </AnimatePresence>
+            </div>
+
+            {/* Input Area */}
+            <div className="p-4 bg-white border-t border-slate-100">
+              {isSessionExpired ? (
+                <Button
+                  onClick={handleNewChat}
+                  className={`${BRAND_CLASSES.bg} ${BRAND_CLASSES.bgHover} text-white w-full shadow-lg`}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" /> Nouvelle conversation
+                </Button>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSend();
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={chatbot.placeholder}
+                    className={`flex-1 px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 transition-all ${
+                      isLoading ? 'opacity-50 pointer-events-none' : ''
+                    }`}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || isLoading}
+                    className={`p-2.5 rounded-xl transition-all ${
+                      !input.trim() || isLoading
+                        ? 'bg-slate-100 text-slate-400'
+                        : 'bg-teal-600 text-white shadow-md shadow-teal-600/20 hover:scale-105'
+                    }`}
+                  >
+                    <Send size={20} />
+                  </button>
+                </form>
+              )}
             </div>
           </motion.div>
         )}
