@@ -241,7 +241,7 @@ export const DICTIONARIES = {
         { question: "On est seulement 3, a-t-on besoin de vous ?", answer: "Absolument. Une cyberattaque ou un hack MVola peut tuer votre boîte en 1 jour. On installe les fondations pour vos futurs 100 employés." }
       ],
       faqCta: "Besoin d'un conseil ?",
-      faqCtaSub: "Rabe analyse votre cas."
+      faqCtaSub: "Rakoto analyse votre cas."
     },
     contact: {
       badge: "Audit",
@@ -293,14 +293,14 @@ export const DICTIONARIES = {
       back_to_top: "Top"
     },
     chatbot: {
-      title: "Rabe Expert IA",
-      welcome: "Bonjour. Je suis Rabe. On règle quel problème informatique aujourd'hui pour libérer votre rentabilité ?",
+      title: "Rakoto Expert IA",
+      welcome: "Bonjour. Je suis Rakoto. On règle quel problème informatique aujourd'hui pour libérer votre rentabilité ?",
       placeholder: "Décrivez votre souci...",
       send: "Envoyer",
       sources: "Sources :",
       disclaimer: "Conseils pro par Kinva.",
       close: "Fermer",
-      open: "Parler à Rabe",
+      open: "Parler à Rakoto",
       thinking: "Analyse...",
       error: "Erreur.",
       form_title: "Qui êtes-vous ?",
