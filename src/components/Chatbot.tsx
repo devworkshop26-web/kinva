@@ -63,7 +63,7 @@ const BRAND_CLASSES = {
   userBubble: 'bg-teal-600 text-white rounded-br-none shadow-md shadow-teal-900/10',
 } as const;
 
-const N8N_WEBHOOK_URL = 'https://kinva.app.n8n.cloud/webhook/chat';
+const N8N_WEBHOOK_URL = 'https://novabyme.app.n8n.cloud/webhook/chat';
 const STORAGE_KEY = 'kinva_chat_messages';
 const SESSION_ID_KEY = 'kinva_chat_session';
 const SESSION_STATUS_KEY = 'kinva_chat_status';
