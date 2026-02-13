@@ -141,7 +141,7 @@ export const About: React.FC = () => {
                     </div>
                 </div>
                 <Button onClick={handleOpenChatbot} className="bg-white text-slate-900 hover:bg-slate-100 whitespace-nowrap w-full sm:w-auto">
-                  Discuter avec Rakoto IA
+                  Discuter avec Rabe IA
                 </Button>
               </motion.div>
 
