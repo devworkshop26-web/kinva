@@ -155,7 +155,7 @@ const MainContent: React.FC = () => {
 
 const App: React.FC = () => {
 
-  const isServiceDown = true; // Change à true pour bloquer le site
+  const isServiceDown = false; // Change à true pour bloquer le site
 
   if (isServiceDown) {
     return <SystemHomePage />;
