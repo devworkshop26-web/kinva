@@ -14,6 +14,7 @@ import { Chatbot } from './components/Chatbot';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AnimatePresence } from 'framer-motion';
 import { LanguageProvider, useLanguage } from './LanguageContext';
+import SystemHomePage from './components/SystemHomePage';
 
 // Create a wrapper component to consume the context
 const MainContent: React.FC = () => {
@@ -153,6 +154,14 @@ const MainContent: React.FC = () => {
 };
 
 const App: React.FC = () => {
+
+  const isServiceDown = true; // Change à true pour bloquer le site
+
+  if (isServiceDown) {
+    return <SystemHomePage />;
+  }
+
+
   return (
     <LanguageProvider>
       <MainContent />
